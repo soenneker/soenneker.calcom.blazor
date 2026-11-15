@@ -1,0 +1,83 @@
+@page "/"
+@using System
+@using System.Threading.Tasks
+@using Soenneker.Calcom.Blazor.Abstract
+@using Soenneker.Calcom.Blazor.Options
+@using Soenneker.Calcom.Blazor.Enums
+@using Soenneker.Calcom.Blazor.Dtos
+@using Soenneker.Calcom.Blazor.Components
+@implements IAsyncDisposable
+@inject ICalcom Calcom
+
+<PageTitle>Cal.com Blazor demo</PageTitle>
+<section class="embed-demo">
+    <h2>Try a Cal.com booking embed</h2>
+    <p>Enter a booking path such as <code>your-name/intro</code>. Choose a layout, then open a popup, floating button, or inline calendar.</p>
+    <div class="embed-fields">
+        <label>Booking path<input @bind="_link" placeholder="your-name/intro" /></label>
+        <label>Name<input @bind="_name" autocomplete="name" /></label>
+        <label>Email<input type="email" @bind="_email" autocomplete="email" /></label>
+        <label>Theme<select @bind="_theme"><option value="auto">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
+        <label>Layout<select @bind="_layout"><option value="month_view">Month</option><option value="week_view">Week</option><option value="column_view">Columns</option></select></label>
+    </div>
+    <div class="embed-actions">
+        <button @onclick="Popup" disabled="@_busy">Open popup</button>
+        <button @onclick="Floating" disabled="@_busy">Show floating button</button>
+        <button @onclick="Inline" disabled="@_busy">Show inline</button>
+        <button @onclick="Clear" disabled="@_busy">Clear widgets</button>
+    </div>
+    @if (_error is not null) { <p role="alert">@_error</p> }
+    @if (_status is not null) { <p role="status">@_status</p> }
+    @if (_inline is not null) { <CalcomInline Options="_inline" /> }
+</section>
+
+@code {
+    private string _link = "";
+    private string _name = "";
+    private string _email = "";
+    private string _theme = "auto";
+    private string _layout = "month_view";
+    private bool _busy;
+    private string? _error;
+    private string? _status;
+    private CalcomOptions? _inline;
+    protected override void OnInitialized()
+    {
+        Calcom.BookingSuccessful += Booked;
+        Calcom.LinkFailed += Failed;
+        Calcom.LinkReady += Ready;
+    }
+    private CalcomBookingConfig Config() => new() { Name = _name, Email = _email, UtmSource = "blazor-demo" };
+    private CalcomUiOptions Ui() => new() { Theme = CalcomTheme.FromValue(_theme), Layout = CalcomLayout.FromValue(_layout) };
+    private async Task Run(Func<ValueTask> action)
+    {
+        _busy = true; _error = null;
+        try { await action(); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+    private Task Popup() => Run(() => Calcom.OpenPopup(new() { CalLink = _link, Config = Config(), Ui = Ui() }));
+    private Task Floating() => Run(() => Calcom.CreateFloatingButton(new() { CalLink = _link, Config = Config(), Ui = Ui() }));
+    private void Inline()
+    {
+        if (string.IsNullOrWhiteSpace(_link) || _link.StartsWith('/') || _link.Contains(":") || _link.Contains(".."))
+        { _error = "Enter a relative Cal.com booking path, such as your-name/intro."; return; }
+        _error = null;
+        _inline = new() { CalLink = _link, Config = Config(), Ui = Ui() };
+    }
+    private async Task Clear()
+    {
+        _inline = null; _status = null;
+        await Run(async () => { await Calcom.ClosePopup(); await Calcom.DestroyFloatingButton(); });
+    }
+    private Task Booked(CalcomEvent data) => InvokeAsync(() => { _status = "Booking completed."; StateHasChanged(); });
+    private Task Ready(CalcomEvent data) => InvokeAsync(() => { _status = "Booking page ready."; StateHasChanged(); });
+    private Task Failed(CalcomEvent data) => InvokeAsync(() => { _error = "Cal.com could not load this booking page. Check the booking path."; StateHasChanged(); });
+    public async ValueTask DisposeAsync()
+    {
+        Calcom.BookingSuccessful -= Booked; Calcom.LinkFailed -= Failed; Calcom.LinkReady -= Ready;
+        try { await Calcom.ClosePopup(); await Calcom.DestroyFloatingButton(); }
+        catch (Microsoft.JSInterop.JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
+    }
+}

@@ -1,0 +1,5 @@
+main { max-width: 1024px; margin: 0 auto; padding: 1.5rem; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid #d4d4d8; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+h1 { font-size: 1.125rem; font-weight: 600; overflow-wrap: anywhere; }
+a { text-decoration: underline; font-size: .875rem; }
+@media (max-width: 480px) { main { padding: 1rem; } }

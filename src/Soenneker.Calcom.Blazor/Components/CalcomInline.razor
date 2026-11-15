@@ -1,0 +1,49 @@
+@namespace Soenneker.Calcom.Blazor.Components
+@using System
+@using System.Threading.Tasks
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@using Soenneker.Calcom.Blazor.Abstract
+@using Soenneker.Calcom.Blazor.Options
+@using Soenneker.Calcom.Blazor.Dtos
+@implements IAsyncDisposable
+@inject ICalcom Calcom
+
+<div @attributes="AdditionalAttributes" id="@_id" style="@Style"></div>
+
+@code {
+    private readonly string _id = $"calcom-{Guid.NewGuid()}";
+    private bool _subscribed;
+
+    /// <summary>Scheduling options. The widget is refreshed when its serialized options change.</summary>
+    [Parameter, EditorRequired] public CalcomOptions Options { get; set; } = default!;
+    /// <summary>Container dimensions. The SDK adjusts iframe dimensions within this container.</summary>
+    [Parameter] public string Style { get; set; } = "min-width:320px;height:750px;";
+    /// <summary>Additional HTML attributes. The generated ID is reserved.</summary>
+    [Parameter(CaptureUnmatchedValues = true)] public System.Collections.Generic.Dictionary<string, object>? AdditionalAttributes { get; set; }
+    /// <summary>Called when this widget completes a booking.</summary>
+    [Parameter] public EventCallback<CalcomEvent> OnBookingSuccessful { get; set; }
+    private string? _renderedOptions;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_subscribed)
+        {
+            Calcom.BookingSuccessful += HandleScheduled;
+            _subscribed = true;
+        }
+        string json = System.Text.Json.JsonSerializer.Serialize(Options, LibraryJsonContext.Default.CalcomOptions);
+        if (json == _renderedOptions) return;
+        await Calcom.CreateInline(_id, Options);
+        _renderedOptions = json;
+    }
+    private Task HandleScheduled(CalcomEvent data) => data.ElementId == _id
+        ? InvokeAsync(() => OnBookingSuccessful.InvokeAsync(data)) : Task.CompletedTask;
+    public async ValueTask DisposeAsync()
+    {
+        Calcom.BookingSuccessful -= HandleScheduled;
+        try { await Calcom.DestroyInline(_id); }
+        catch (JSDisconnectedException) { }
+        catch (ObjectDisposedException) { }
+    }
+}
